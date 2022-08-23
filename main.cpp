@@ -4,6 +4,7 @@
 #include <Windows.h>
 #include <string>
 #include <vector>
+#include <optional>
 
 OBS_DECLARE_MODULE()
 
@@ -12,9 +13,9 @@ HHOOK shellEvents;
 
 const char *SUBSYSTEM_NAME="[Don't Blink]";
 
-void Log(const std::string &message)
+void Log(const std::optional<std::string> &message)
 {
-	blog(LOG_INFO,"%s%s%s",SUBSYSTEM_NAME," ",message.data());
+	if (message) blog(LOG_INFO,"%s%s%s",SUBSYSTEM_NAME," ",message->data());
 }
 
 void Warn(const std::string &message)
@@ -22,18 +23,26 @@ void Warn(const std::string &message)
 	blog(LOG_WARNING,"%s%s%s",SUBSYSTEM_NAME," ",message.data());
 }
 
-VOID CALLBACK ForegroundWindowChanged(HWINEVENTHOOK windowEvents,DWORD event,HWND window,LONG objectID,LONG childID,DWORD eventThread,DWORD timestamp)
+std::optional<std::string> GetWindowTitle(HWND window)
 {
 	int titleLength=GetWindowTextLength(window)+1;
-	Log("Title length: " + std::to_string(titleLength));
-	if (titleLength < 1) return;
+	if (titleLength < 1) return std::nullopt;
 	std::vector<char> title(titleLength);
 	if (!GetWindowText(window,title.data(),titleLength)) // FIXME: don't assum LPSTR here
 	{
-		Log("Failed to obtain window title text (" + std::to_string(GetLastError()) + ")");
+		DWORD errorCode=GetLastError();
+		if (errorCode != 127) Log("Failed to obtain window title text (" + std::to_string(GetLastError()) + ")");
+		// for some reason, EnumWindows results in a lot of windows with 1 character long titles that
+		// I can't call GetWindowText on, so just filter them out
+		return std::nullopt;
 	}
 
-	Log(title.data());
+	return title.data();
+}
+
+VOID CALLBACK ForegroundWindowChanged(HWINEVENTHOOK windowEvents,DWORD event,HWND window,LONG objectID,LONG childID,DWORD eventThread,DWORD timestamp)
+{
+	Log(GetWindowTitle(window));
 }
 
 LRESULT CALLBACK ShellEvent(int code,WPARAM wParam,LPARAM lParam)
@@ -55,9 +64,23 @@ LRESULT CALLBACK ShellEvent(int code,WPARAM wParam,LPARAM lParam)
 	return 0;
 }
 
+BOOL CALLBACK WindowAvailable(HWND window,LPARAM lParam)
+{
+	if (GetWindowLong(window,GWL_STYLE) & WS_CHILD) return TRUE;
+	Log(GetWindowTitle(window));
+	return TRUE;
+}
+
+void UpdateAvailbleWindows()
+{
+	EnumWindows(WindowAvailable,NULL);
+}
+
 bool obs_module_load()
 {
 	//obs_frontend_add_event_callback(HandleEvent,nullptr);
+
+	UpdateAvailbleWindows();
 
 	windowEvents=SetWinEventHook(EVENT_SYSTEM_FOREGROUND,EVENT_SYSTEM_FOREGROUND,nullptr,ForegroundWindowChanged,0,0,WINEVENT_OUTOFCONTEXT|WINEVENT_SKIPOWNPROCESS);
 	if (!windowEvents)
