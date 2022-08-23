@@ -5,6 +5,9 @@
 #include <string>
 #include <vector>
 #include <optional>
+#include <memory>
+#include <unordered_map>
+#include <stdexcept>
 
 OBS_DECLARE_MODULE()
 
@@ -12,6 +15,16 @@ HWINEVENTHOOK windowEvents;
 HHOOK shellEvents;
 
 const char *SUBSYSTEM_NAME="[Don't Blink]";
+
+using SourcePtr=std::unique_ptr<obs_source_t,decltype(&obs_source_release)>;
+using SourceListPtr=std::unique_ptr<obs_frontend_source_list,decltype(&obs_frontend_source_list_free)>;
+using SceneItemPtr=std::unique_ptr<obs_sceneitem_t,decltype(&obs_sceneitem_release)>;
+
+std::unordered_map<std::string,obs_source_t*> sources;
+std::unordered_map<std::string,std::string> triggers {
+	{"Release","Herb"},
+	{"64bit","Celeste"}
+};
 
 void Log(const std::optional<std::string> &message)
 {
@@ -42,6 +55,12 @@ std::optional<std::string> GetWindowTitle(HWND window)
 
 VOID CALLBACK ForegroundWindowChanged(HWINEVENTHOOK windowEvents,DWORD event,HWND window,LONG objectID,LONG childID,DWORD eventThread,DWORD timestamp)
 {
+	std::optional<std::string> title=GetWindowTitle(window);
+	if (!title) return;
+
+	obs_scene_t *scene=obs_scene_from_source(SourcePtr(obs_frontend_get_current_scene(),&obs_source_release).get()); // passing NULL into obs_scene_from_source() does not crash
+	if (!scene) throw std::runtime_error("Could not determine current scene");
+	obs_sceneitem_set_visible(obs_scene_find_source(scene,triggers.at(*title).data()),false);
 	Log(GetWindowTitle(window));
 }
 
@@ -67,7 +86,6 @@ LRESULT CALLBACK ShellEvent(int code,WPARAM wParam,LPARAM lParam)
 BOOL CALLBACK WindowAvailable(HWND window,LPARAM lParam)
 {
 	if (GetWindowLong(window,GWL_STYLE) & WS_CHILD) return TRUE;
-	Log(GetWindowTitle(window));
 	return TRUE;
 }
 
@@ -76,9 +94,33 @@ void UpdateAvailbleWindows()
 	EnumWindows(WindowAvailable,NULL);
 }
 
+bool AvailableSource(obs_scene_t *scene,obs_sceneitem_t *item,void *data)
+{
+	obs_source_t *source=obs_sceneitem_get_source(item);
+	sources[obs_source_get_name(source)]=source;
+	return true;
+}
+
+void UpdateAvailableSources()
+{
+	obs_scene_t *scene=obs_scene_from_source(SourcePtr(obs_frontend_get_current_scene(),&obs_source_release).get()); // get current scene
+	obs_scene_enum_items(scene,&AvailableSource,nullptr);
+}
+
+void HandleEvent(obs_frontend_event event,void *data)
+{
+	switch (event)
+	{
+	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
+		UpdateAvailableSources();
+		for (const std::pair<std::string,obs_source_t*> &pair : sources) Log("Source: " + pair.first);
+		break;
+	}
+}
+
 bool obs_module_load()
 {
-	//obs_frontend_add_event_callback(HandleEvent,nullptr);
+	obs_frontend_add_event_callback(HandleEvent,nullptr);
 
 	UpdateAvailbleWindows();
 
@@ -99,6 +141,8 @@ bool obs_module_load()
 
 void obs_module_unload()
 {
+	obs_frontend_remove_event_callback(HandleEvent,nullptr);
+
 	if (UnhookWinEvent(windowEvents))
 		Log("Unsubscribed from system window events");
 	else
@@ -108,6 +152,4 @@ void obs_module_unload()
 		Log("Unsubscribed from system shell events");
 	else
 		Log("Failed to unsubscribe from system window events");
-
-	//obs_frontend_remove_event_callback(HandleEvent,nullptr);
 }
