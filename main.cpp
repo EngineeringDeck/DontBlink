@@ -52,12 +52,13 @@ QString GetWindowTitle(HWND window)
 	{
 		DWORD errorCode=GetLastError();
 		Log("Failed to obtain window title text (" + QString::number(GetLastError()) + ")");
-		// for some reason, EnumWindows results in a lot of windows with 1 character long titles that
-		// I can't call GetWindowText on, so just filter them out
 		return {};
 	}
 
-	return {title};
+	int delimiterIndex=title.lastIndexOf("- ");
+	if (delimiterIndex < 0) return {title};
+	delimiterIndex+=2;
+	return QString(title).right(title.size()-delimiterIndex);
 }
 
 VOID CALLBACK ForegroundWindowChanged(HWINEVENTHOOK windowEvents,DWORD event,HWND window,LONG objectID,LONG childID,DWORD eventThread,DWORD timestamp)
