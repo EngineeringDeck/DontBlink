@@ -99,9 +99,29 @@ LRESULT CALLBACK ShellEvent(int code,WPARAM wParam,LPARAM lParam)
 
 BOOL CALLBACK WindowAvailable(HWND window,LPARAM data)
 {
+	if(!IsWindowVisible(window) || (GetWindowLong(window,GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) return TRUE;
+
+	HWND tryHandle=nullptr;
+	HWND walkHandle=nullptr;
+	tryHandle=GetAncestor(window,GA_ROOTOWNER);
+	while(tryHandle != walkHandle)
+	{
+		walkHandle=tryHandle;
+		tryHandle=GetLastActivePopup(walkHandle);
+		if(IsWindowVisible(tryHandle)) break;
+	}
+	if (walkHandle != window) return TRUE;
+
+	TITLEBARINFO titlebarInfo={
+		.cbSize=sizeof(titlebarInfo)
+	};
+	GetTitleBarInfo(window,&titlebarInfo);
+	if(titlebarInfo.rgstate[0] & STATE_SYSTEM_INVISIBLE) return TRUE;
+
 	std::unordered_map<QString,QString> *triggers=reinterpret_cast<std::unordered_map<QString,QString>*>(data);
 	if (GetWindowLong(window,GWL_STYLE) & WS_CHILD) return TRUE;
 	if (QString title=GetWindowTitle(window); !title.isNull()) if (!triggers->contains(title)) (*triggers)[title]=QString();
+
 	return TRUE;
 }
 
