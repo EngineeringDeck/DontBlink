@@ -3,6 +3,7 @@
 #include <obs-frontend-api.h>
 #include <Windows.h>
 #include <QString>
+#include <QTimer>
 #include <vector>
 #include <memory>
 #include <unordered_map>
@@ -14,7 +15,7 @@ OBS_DECLARE_MODULE()
 
 std::unordered_map<QString,obs_source_t*> sources;
 QString foregroundWindowTitle;
-
+QTimer refreshInterval;
 ScrollingList *sourcesWidget;
 
 HWINEVENTHOOK windowEvents;
@@ -136,7 +137,7 @@ void HandleEvent(obs_frontend_event event,void *data)
 	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
 		UpdateAvailableSources();
 		UpdateAvailableWindows();
-		for (const std::pair<QString,obs_source_t*> &pair : sources) Log("Source: " + pair.first);
+		refreshInterval.start();
 		break;
 	}
 }
@@ -164,6 +165,8 @@ bool obs_module_load()
 	obs_frontend_add_event_callback(HandleEvent,nullptr);
 
 	BuildUI();
+	refreshInterval.setInterval(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds(1)));
+	refreshInterval.connect(&refreshInterval,&QTimer::timeout,&refreshInterval,&UpdateAvailableWindows);
 
 	windowEvents=SetWinEventHook(EVENT_SYSTEM_FOREGROUND,EVENT_SYSTEM_FOREGROUND,nullptr,ForegroundWindowChanged,0,0,WINEVENT_OUTOFCONTEXT|WINEVENT_SKIPOWNPROCESS);
 	if (!windowEvents)
@@ -177,6 +180,8 @@ bool obs_module_load()
 void obs_module_unload()
 {
 	obs_frontend_remove_event_callback(HandleEvent,nullptr);
+
+	refreshInterval.stop();
 
 	if (UnhookWinEvent(windowEvents))
 		Log("Unsubscribed from system window events");
