@@ -2,9 +2,8 @@
 #include <obs-source.h>
 #include <obs-frontend-api.h>
 #include <Windows.h>
-#include <string>
+#include <QString>
 #include <vector>
-#include <optional>
 #include <memory>
 #include <unordered_map>
 #include <stdexcept>
@@ -12,8 +11,8 @@
 
 OBS_DECLARE_MODULE()
 
-std::unordered_map<std::string,obs_source_t*> sources;
-std::unordered_map<std::string,std::optional<std::string>> triggers;
+std::unordered_map<QString,obs_source_t*> sources;
+std::unordered_map<QString,QString> triggers;
 
 ScrollingList *sourcesWidget;
 
@@ -26,51 +25,51 @@ using SourcePtr=std::unique_ptr<obs_source_t,decltype(&obs_source_release)>;
 using SourceListPtr=std::unique_ptr<obs_frontend_source_list,decltype(&obs_frontend_source_list_free)>;
 using SceneItemPtr=std::unique_ptr<obs_sceneitem_t,decltype(&obs_sceneitem_release)>;
 
-void Log(const std::optional<std::string> &message)
+void Log(const QString &message)
 {
-	if (message) blog(LOG_INFO,"%s%s%s",SUBSYSTEM_NAME," ",message->data());
+	if (!message.isNull()) blog(LOG_INFO,"%s%s%s",SUBSYSTEM_NAME," ",message.toLocal8Bit().constData());
 }
 
-void Warn(const std::string &message)
+void Warn(const QString &message)
 {
-	blog(LOG_WARNING,"%s%s%s",SUBSYSTEM_NAME," ",message.data());
+	blog(LOG_WARNING,"%s%s%s",SUBSYSTEM_NAME," ",message.toLocal8Bit().data());
 }
 
 QStringList SourceNames()
 {
 	QStringList list;
-	for (const std::pair<std::string,obs_source_t*> &pair : sources) list.append(QString::fromStdString(pair.first));
+	for (const std::pair<QString,obs_source_t*> &pair : sources) list.append(pair.first);
 	return list;
 }
 
-std::optional<std::string> GetWindowTitle(HWND window)
+QString GetWindowTitle(HWND window)
 {
-	int titleLength=GetWindowTextLength(window)+1;
-	if (titleLength < 1) return std::nullopt;
-	std::vector<char> title(titleLength);
-	if (!GetWindowText(window,title.data(),titleLength)) // FIXME: don't assum LPSTR here
+	int titleLength=GetWindowTextLength(window); // TODO: does this have to be +1 now?
+	if (titleLength < 1) return {};
+	QByteArray title(++titleLength,'\0');
+	if (!GetWindowText(window,title.data(),titleLength)) // FIXME: don't assume LPSTR here
 	{
 		DWORD errorCode=GetLastError();
-		if (errorCode != 127) Log("Failed to obtain window title text (" + std::to_string(GetLastError()) + ")");
+		Log("Failed to obtain window title text (" + QString::number(GetLastError()) + ")");
 		// for some reason, EnumWindows results in a lot of windows with 1 character long titles that
 		// I can't call GetWindowText on, so just filter them out
-		return std::nullopt;
+		return {};
 	}
 
-	return title.data();
+	return {title};
 }
 
 VOID CALLBACK ForegroundWindowChanged(HWINEVENTHOOK windowEvents,DWORD event,HWND window,LONG objectID,LONG childID,DWORD eventThread,DWORD timestamp)
 {
-	std::optional<std::string> title=GetWindowTitle(window);
-	if (!title) return;
+	QString title=GetWindowTitle(window);
+	if (title.isNull()) return;
 
 	obs_scene_t *scene=obs_scene_from_source(SourcePtr(obs_frontend_get_current_scene(),&obs_source_release).get()); // passing NULL into obs_scene_from_source() does not crash
 	if (!scene) throw std::runtime_error("Could not determine current scene");
-	if (std::optional<QString> sourceName=sourcesWidget->Source(QString::fromStdString(*title)); sourceName)
+	if (QString sourceName=sourcesWidget->Source(title); !sourceName.isNull())
 	{
-		Log("Change Window: " + sourceName->toStdString());
-		obs_sceneitem_set_visible(obs_scene_find_source(scene,sourceName->toStdString().data()),true);
+		Log("Change Window: " + sourceName);
+		obs_sceneitem_set_visible(obs_scene_find_source(scene,sourceName.toLocal8Bit().data()),true);
 	}
 	Log(GetWindowTitle(window));
 }
@@ -97,7 +96,7 @@ LRESULT CALLBACK ShellEvent(int code,WPARAM wParam,LPARAM lParam)
 BOOL CALLBACK WindowAvailable(HWND window,LPARAM lParam)
 {
 	if (GetWindowLong(window,GWL_STYLE) & WS_CHILD) return TRUE;
-	if (std::optional<std::string> title=GetWindowTitle(window); title) if (!triggers.contains(*title)) triggers[*title]=std::nullopt;
+	if (QString title=GetWindowTitle(window); !title.isNull()) if (!triggers.contains(title)) triggers[title]=QString();
 	return TRUE;
 }
 
@@ -105,7 +104,7 @@ void UpdateAvailbleWindows()
 {
 	EnumWindows(WindowAvailable,NULL);
 	QStringList sourceNames=SourceNames();
-	for (const std::pair<std::string,std::optional<std::string>> &pair : triggers) sourcesWidget->AddEntry(new CrossReference(QString::fromStdString(pair.first),sourceNames,sourcesWidget));
+	for (const std::pair<QString,QString> &pair : triggers) sourcesWidget->AddEntry(new CrossReference(pair.first,sourceNames,sourcesWidget));
 }
 
 bool AvailableSource(obs_scene_t *scene,obs_sceneitem_t *item,void *data)
@@ -128,7 +127,7 @@ void HandleEvent(obs_frontend_event event,void *data)
 	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
 		UpdateAvailableSources();
 		UpdateAvailbleWindows();
-		for (const std::pair<std::string,obs_source_t*> &pair : sources) Log("Source: " + pair.first);
+		for (const std::pair<QString,obs_source_t*> &pair : sources) Log("Source: " + pair.first);
 		break;
 	}
 }
