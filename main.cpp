@@ -12,7 +12,6 @@
 OBS_DECLARE_MODULE()
 
 std::unordered_map<QString,obs_source_t*> sources;
-std::unordered_map<QString,QString> triggers;
 QString foregroundWindowTitle;
 
 ScrollingList *sourcesWidget;
@@ -98,16 +97,18 @@ LRESULT CALLBACK ShellEvent(int code,WPARAM wParam,LPARAM lParam)
 	return 0;
 }
 
-BOOL CALLBACK WindowAvailable(HWND window,LPARAM lParam)
+BOOL CALLBACK WindowAvailable(HWND window,LPARAM data)
 {
+	std::unordered_map<QString,QString> *triggers=reinterpret_cast<std::unordered_map<QString,QString>*>(data);
 	if (GetWindowLong(window,GWL_STYLE) & WS_CHILD) return TRUE;
-	if (QString title=GetWindowTitle(window); !title.isNull()) if (!triggers.contains(title)) triggers[title]=QString();
+	if (QString title=GetWindowTitle(window); !title.isNull()) if (!triggers->contains(title)) (*triggers)[title]=QString();
 	return TRUE;
 }
 
 void UpdateAvailbleWindows()
 {
-	EnumWindows(WindowAvailable,NULL);
+	std::unordered_map<QString,QString> triggers;
+	EnumWindows(WindowAvailable,reinterpret_cast<LPARAM>(&triggers));
 	QStringList sourceNames=SourceNames();
 	for (const std::pair<QString,QString> &pair : triggers) sourcesWidget->AddEntry(new CrossReference(pair.first,sourceNames,sourcesWidget));
 }
