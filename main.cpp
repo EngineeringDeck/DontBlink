@@ -79,25 +79,6 @@ VOID CALLBACK ForegroundWindowChanged(HWINEVENTHOOK windowEvents,DWORD event,HWN
 	foregroundWindowTitle=title;
 }
 
-LRESULT CALLBACK ShellEvent(int code,WPARAM wParam,LPARAM lParam)
-{
-	if (code < 0) return CallNextHookEx(0,code,wParam,lParam);
-
-	switch (code)
-	{
-	case HSHELL_WINDOWCREATED:
-		Log("Window Created");
-		break;
-	case HSHELL_WINDOWDESTROYED:
-		Log("Window Destroyed");
-		break;
-	default:
-		break;
-	}
-
-	return 0;
-}
-
 BOOL CALLBACK WindowAvailable(HWND window,LPARAM data)
 {
 	if(!IsWindowVisible(window) || (GetWindowLong(window,GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) return TRUE;
@@ -189,12 +170,6 @@ bool obs_module_load()
 	else
 		Log("Subscribed to system window events");
 
-	shellEvents=SetWindowsHookEx(WH_SHELL,ShellEvent,0,0);
-	if (!shellEvents)
-		Log("Failed to subscribe to system shell events (" + std::to_string(GetLastError()) + ")");
-	else
-		Log("Subscribed to system shell events");
-
 	return true;
 }
 
@@ -204,11 +179,6 @@ void obs_module_unload()
 
 	if (UnhookWinEvent(windowEvents))
 		Log("Unsubscribed from system window events");
-	else
-		Log("Failed to unsubscribe from system window events");
-
-	if (UnhookWindowsHookEx(shellEvents))
-		Log("Unsubscribed from system shell events");
 	else
 		Log("Failed to unsubscribe from system window events");
 }
