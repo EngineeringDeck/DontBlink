@@ -18,7 +18,7 @@ execute_process(COMMAND powershell ${CMAKE_SOURCE_DIR}/obs-bootstrap.ps1)
 set(OBS_SOURCE_DIR ${CMAKE_SOURCE_DIR}/obs-studio)
 set(OBS_LIB_DIR ${CMAKE_SOURCE_DIR}/obs-studio/build64)
 
-add_library(DontBlink MODULE main.cpp)
+add_library(DontBlink MODULE widgets.h widgets.cpp main.cpp)
 include_directories(${OBS_SOURCE_DIR}/libobs)
 include_directories(${OBS_SOURCE_DIR}/UI/obs-frontend-api/)
 target_include_directories(DontBlink SYSTEM PRIVATE ${OBS_INCLUDE_DIR}/obs)
