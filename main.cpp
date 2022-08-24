@@ -13,6 +13,7 @@ OBS_DECLARE_MODULE()
 
 std::unordered_map<QString,obs_source_t*> sources;
 std::unordered_map<QString,QString> triggers;
+QString foregroundWindowTitle;
 
 ScrollingList *sourcesWidget;
 
@@ -65,13 +66,17 @@ VOID CALLBACK ForegroundWindowChanged(HWINEVENTHOOK windowEvents,DWORD event,HWN
 	if (title.isNull()) return;
 
 	obs_scene_t *scene=obs_scene_from_source(SourcePtr(obs_frontend_get_current_scene(),&obs_source_release).get()); // passing NULL into obs_scene_from_source() does not crash
-	if (!scene) throw std::runtime_error("Could not determine current scene");
-	if (QString sourceName=sourcesWidget->Source(title); !sourceName.isNull())
+	if (!scene) return;
+
+	// active new source
+	if (QString newSourceName=sourcesWidget->Source(title); !newSourceName.isNull()) obs_sceneitem_set_visible(obs_scene_find_source(scene,newSourceName.toLocal8Bit().data()),true);
+
+	// deactive previous source
+	if (!foregroundWindowTitle.isNull())
 	{
-		Log("Change Window: " + sourceName);
-		obs_sceneitem_set_visible(obs_scene_find_source(scene,sourceName.toLocal8Bit().data()),true);
+		if (QString oldSourceName=sourcesWidget->Source(foregroundWindowTitle); !oldSourceName.isNull()) obs_sceneitem_set_visible(obs_scene_find_source(scene,oldSourceName.toLocal8Bit().data()),false);
 	}
-	Log(GetWindowTitle(window));
+	foregroundWindowTitle=title;
 }
 
 LRESULT CALLBACK ShellEvent(int code,WPARAM wParam,LPARAM lParam)
