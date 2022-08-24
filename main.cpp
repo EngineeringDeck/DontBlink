@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <stdexcept>
 #include "widgets.h"
 
@@ -118,19 +119,19 @@ BOOL CALLBACK WindowAvailable(HWND window,LPARAM data)
 	GetTitleBarInfo(window,&titlebarInfo);
 	if(titlebarInfo.rgstate[0] & STATE_SYSTEM_INVISIBLE) return TRUE;
 
-	std::unordered_map<QString,QString> *triggers=reinterpret_cast<std::unordered_map<QString,QString>*>(data);
+	std::unordered_set<QString> *triggers=reinterpret_cast<std::unordered_set<QString>*>(data);
 	if (GetWindowLong(window,GWL_STYLE) & WS_CHILD) return TRUE;
-	if (QString title=GetWindowTitle(window); !title.isNull()) if (!triggers->contains(title)) (*triggers)[title]=QString();
+	if (QString title=GetWindowTitle(window); !title.isNull()) if (!triggers->contains(title)) triggers->insert(title);
 
 	return TRUE;
 }
 
-void UpdateAvailbleWindows()
+void UpdateAvailableWindows()
 {
-	std::unordered_map<QString,QString> triggers;
+	std::unordered_set<QString> triggers;
 	EnumWindows(WindowAvailable,reinterpret_cast<LPARAM>(&triggers));
 	QStringList sourceNames=SourceNames();
-	for (const std::pair<QString,QString> &pair : triggers) sourcesWidget->AddEntry(new CrossReference(pair.first,sourceNames,sourcesWidget));
+	sourcesWidget->AddEntries(triggers,sourceNames);
 }
 
 bool AvailableSource(obs_scene_t *scene,obs_sceneitem_t *item,void *data)
@@ -152,7 +153,7 @@ void HandleEvent(obs_frontend_event event,void *data)
 	{
 	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
 		UpdateAvailableSources();
-		UpdateAvailbleWindows();
+		UpdateAvailableWindows();
 		for (const std::pair<QString,obs_source_t*> &pair : sources) Log("Source: " + pair.first);
 		break;
 	}
@@ -162,8 +163,15 @@ void BuildUI()
 {
 	QMainWindow *window=static_cast<QMainWindow*>(obs_frontend_get_main_window());
 	QDockWidget *dock=new QDockWidget("Don't Blink",window);
-	sourcesWidget=new ScrollingList(dock);
-	dock->setWidget(sourcesWidget);
+	QWidget *content=new QWidget(dock);
+	QGridLayout *layout=new QGridLayout(content);
+	sourcesWidget=new ScrollingList(content);
+	layout->addWidget(sourcesWidget);
+	QPushButton *refresh=new QPushButton("Refresh",content);
+	refresh->connect(refresh,&QPushButton::clicked,refresh,&UpdateAvailableWindows);
+	layout->addWidget(refresh);
+	content->setLayout(layout);
+	dock->setWidget(content);
 	dock->setObjectName("dont_blink");
 	window->addDockWidget(Qt::BottomDockWidgetArea,dock);
 	obs_frontend_add_dock(dock);
