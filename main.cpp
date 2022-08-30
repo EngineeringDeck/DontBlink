@@ -1,7 +1,6 @@
 #include <obs-module.h>
 #include <obs-source.h>
 #include <obs-frontend-api.h>
-#include <Windows.h>
 #include <QString>
 #include <QTimer>
 #include <vector>
@@ -10,6 +9,7 @@
 #include <unordered_set>
 #include <stdexcept>
 #include "widgets.h"
+#include "platform.h"
 
 OBS_DECLARE_MODULE()
 
@@ -17,15 +17,13 @@ std::unordered_map<QString,obs_source_t*> sources;
 QString foregroundWindowTitle;
 QTimer refreshInterval;
 ScrollingList *sourcesWidget;
-
-HWINEVENTHOOK windowEvents;
-HHOOK shellEvents;
-
-const char *SUBSYSTEM_NAME="[Don't Blink]";
+std::unique_ptr<Platform> platform;
 
 using SourcePtr=std::unique_ptr<obs_source_t,decltype(&obs_source_release)>;
 using SourceListPtr=std::unique_ptr<obs_frontend_source_list,decltype(&obs_frontend_source_list_free)>;
 using SceneItemPtr=std::unique_ptr<obs_sceneitem_t,decltype(&obs_sceneitem_release)>;
+
+const char *SUBSYSTEM_NAME="[Don't Blink]";
 
 void Log(const QString &message)
 {
@@ -44,29 +42,21 @@ QStringList SourceNames()
 	return list;
 }
 
-QString GetWindowTitle(HWND window)
+bool AvailableSource(obs_scene_t *scene,obs_sceneitem_t *item,void *data)
 {
-	int titleLength=GetWindowTextLength(window); // TODO: does this have to be +1 now?
-	if (titleLength < 1) return {};
-	QByteArray title(++titleLength,'\0');
-	if (!GetWindowText(window,title.data(),titleLength)) // FIXME: don't assume LPSTR here
-	{
-		DWORD errorCode=GetLastError();
-		Log("Failed to obtain window title text (" + QString::number(GetLastError()) + ")");
-		return {};
-	}
-
-	int delimiterIndex=title.lastIndexOf("- ");
-	if (delimiterIndex < 0) return {title};
-	delimiterIndex+=2;
-	return QString(title).right(title.size()-delimiterIndex);
+	obs_source_t *source=obs_sceneitem_get_source(item);
+	sources[obs_source_get_name(source)]=source;
+	return true;
 }
 
-VOID CALLBACK ForegroundWindowChanged(HWINEVENTHOOK windowEvents,DWORD event,HWND window,LONG objectID,LONG childID,DWORD eventThread,DWORD timestamp)
+void UpdateAvailableSources()
 {
-	QString title=GetWindowTitle(window);
-	if (title.isNull()) return;
+	obs_scene_t *scene=obs_scene_from_source(SourcePtr(obs_frontend_get_current_scene(),&obs_source_release).get()); // get current scene
+	obs_scene_enum_items(scene,&AvailableSource,nullptr);
+}
 
+void ForegroundWindowChanged(const QString &title)
+{
 	obs_scene_t *scene=obs_scene_from_source(SourcePtr(obs_frontend_get_current_scene(),&obs_source_release).get()); // passing NULL into obs_scene_from_source() does not crash
 	if (!scene) return;
 
@@ -81,53 +71,10 @@ VOID CALLBACK ForegroundWindowChanged(HWINEVENTHOOK windowEvents,DWORD event,HWN
 	foregroundWindowTitle=title;
 }
 
-BOOL CALLBACK WindowAvailable(HWND window,LPARAM data)
+void AvailableWindowsUpdated(std::unordered_set<QString> &titles)
 {
-	if(!IsWindowVisible(window) || (GetWindowLong(window,GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) return TRUE;
-
-	HWND tryHandle=nullptr;
-	HWND walkHandle=nullptr;
-	tryHandle=GetAncestor(window,GA_ROOTOWNER);
-	while(tryHandle != walkHandle)
-	{
-		walkHandle=tryHandle;
-		tryHandle=GetLastActivePopup(walkHandle);
-		if(IsWindowVisible(tryHandle)) break;
-	}
-	if (walkHandle != window) return TRUE;
-
-	TITLEBARINFO titlebarInfo={
-		.cbSize=sizeof(titlebarInfo)
-	};
-	GetTitleBarInfo(window,&titlebarInfo);
-	if(titlebarInfo.rgstate[0] & STATE_SYSTEM_INVISIBLE) return TRUE;
-
-	std::unordered_set<QString> *triggers=reinterpret_cast<std::unordered_set<QString>*>(data);
-	if (GetWindowLong(window,GWL_STYLE) & WS_CHILD) return TRUE;
-	if (QString title=GetWindowTitle(window); !title.isNull()) if (!triggers->contains(title)) triggers->insert(title);
-
-	return TRUE;
-}
-
-void UpdateAvailableWindows()
-{
-	std::unordered_set<QString> triggers;
-	EnumWindows(WindowAvailable,reinterpret_cast<LPARAM>(&triggers));
 	QStringList sourceNames=SourceNames();
-	sourcesWidget->AddEntries(triggers,sourceNames);
-}
-
-bool AvailableSource(obs_scene_t *scene,obs_sceneitem_t *item,void *data)
-{
-	obs_source_t *source=obs_sceneitem_get_source(item);
-	sources[obs_source_get_name(source)]=source;
-	return true;
-}
-
-void UpdateAvailableSources()
-{
-	obs_scene_t *scene=obs_scene_from_source(SourcePtr(obs_frontend_get_current_scene(),&obs_source_release).get()); // get current scene
-	obs_scene_enum_items(scene,&AvailableSource,nullptr);
+	sourcesWidget->AddEntries(titles,sourceNames);
 }
 
 void HandleEvent(obs_frontend_event event,void *data)
@@ -136,7 +83,7 @@ void HandleEvent(obs_frontend_event event,void *data)
 	{
 	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
 		UpdateAvailableSources();
-		UpdateAvailableWindows();
+		platform->UpdateAvailableWindows();
 		refreshInterval.start();
 		break;
 	}
@@ -151,7 +98,7 @@ void BuildUI()
 	sourcesWidget=new ScrollingList(content);
 	layout->addWidget(sourcesWidget);
 	QPushButton *refresh=new QPushButton("Refresh",content);
-	refresh->connect(refresh,&QPushButton::clicked,refresh,&UpdateAvailableWindows);
+	refresh->connect(refresh,&QPushButton::clicked,platform.get(),&Platform::UpdateAvailableWindows);
 	layout->addWidget(refresh);
 	content->setLayout(layout);
 	dock->setWidget(content);
@@ -166,13 +113,21 @@ bool obs_module_load()
 
 	BuildUI();
 	refreshInterval.setInterval(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds(1)));
-	refreshInterval.connect(&refreshInterval,&QTimer::timeout,&refreshInterval,&UpdateAvailableWindows);
+	refreshInterval.connect(&refreshInterval,&QTimer::timeout,platform.get(),&Platform::UpdateAvailableWindows);
 
-	windowEvents=SetWinEventHook(EVENT_SYSTEM_FOREGROUND,EVENT_SYSTEM_FOREGROUND,nullptr,ForegroundWindowChanged,0,0,WINEVENT_OUTOFCONTEXT|WINEVENT_SKIPOWNPROCESS);
-	if (!windowEvents)
-		Log("Failed to subscribe to system window events");
-	else
-		Log("Subscribed to system window events");
+	try
+	{
+		platform=std::unique_ptr<Platform>(Platform::Create());
+	}
+	catch (const std::runtime_error &exception)
+	{
+		Log(QString("Error initializing platform (%1)").arg(exception.what()));
+		return false;
+	}
+	platform->connect(platform.get(),&Platform::Log,platform.get(),&Log);
+	platform->connect(platform.get(),&Platform::AvailableWindowsUpdated,platform.get(),&AvailableWindowsUpdated);
+	platform->connect(platform.get(),&Platform::ForegroundWindowChanged,platform.get(),&ForegroundWindowChanged);
+	Log("OS-specific logic initialized");
 
 	return true;
 }
@@ -182,9 +137,4 @@ void obs_module_unload()
 	obs_frontend_remove_event_callback(HandleEvent,nullptr);
 
 	refreshInterval.stop();
-
-	if (UnhookWinEvent(windowEvents))
-		Log("Unsubscribed from system window events");
-	else
-		Log("Failed to unsubscribe from system window events");
 }
