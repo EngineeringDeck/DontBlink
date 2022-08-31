@@ -17,7 +17,7 @@ std::unordered_map<QString,obs_source_t*> sources;
 QString foregroundWindowTitle;
 QTimer refreshInterval;
 ScrollingList *sourcesWidget;
-std::unique_ptr<Platform> platform;
+Platform *platform;
 
 using SourcePtr=std::unique_ptr<obs_source_t,decltype(&obs_source_release)>;
 using SourceListPtr=std::unique_ptr<obs_frontend_source_list,decltype(&obs_frontend_source_list_free)>;
@@ -71,7 +71,7 @@ void ForegroundWindowChanged(const QString &title)
 	foregroundWindowTitle=title;
 }
 
-void AvailableWindowsUpdated(std::unordered_set<QString> &titles)
+void AvailableWindowsUpdated(const std::unordered_set<QString> &titles)
 {
 	QStringList sourceNames=SourceNames();
 	sourcesWidget->AddEntries(titles,sourceNames);
@@ -98,7 +98,7 @@ void BuildUI()
 	sourcesWidget=new ScrollingList(content);
 	layout->addWidget(sourcesWidget);
 	QPushButton *refresh=new QPushButton("Refresh",content);
-	refresh->connect(refresh,&QPushButton::clicked,platform.get(),&Platform::UpdateAvailableWindows);
+	refresh->connect(refresh,&QPushButton::clicked,platform,&Platform::UpdateAvailableWindows);
 	layout->addWidget(refresh);
 	content->setLayout(layout);
 	dock->setWidget(content);
@@ -112,22 +112,23 @@ bool obs_module_load()
 	obs_frontend_add_event_callback(HandleEvent,nullptr);
 
 	BuildUI();
-	refreshInterval.setInterval(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds(1)));
-	refreshInterval.connect(&refreshInterval,&QTimer::timeout,platform.get(),&Platform::UpdateAvailableWindows);
 
 	try
 	{
-		platform=std::unique_ptr<Platform>(Platform::Create());
+		platform=Platform::Create();
 	}
 	catch (const std::runtime_error &exception)
 	{
 		Log(QString("Error initializing platform (%1)").arg(exception.what()));
 		return false;
 	}
-	platform->connect(platform.get(),&Platform::Log,platform.get(),&Log);
-	platform->connect(platform.get(),&Platform::AvailableWindowsUpdated,platform.get(),&AvailableWindowsUpdated);
-	platform->connect(platform.get(),&Platform::ForegroundWindowChanged,platform.get(),&ForegroundWindowChanged);
+	platform->connect(platform,&Platform::Log,platform,&Log);
+	platform->connect(platform,&Platform::AvailableWindowsUpdated,platform,&AvailableWindowsUpdated);
+	platform->connect(platform,&Platform::ForegroundWindowChanged,platform,&ForegroundWindowChanged);
 	Log("OS-specific logic initialized");
+
+	refreshInterval.setInterval(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds(1)));
+	refreshInterval.connect(&refreshInterval,&QTimer::timeout,platform,&Platform::UpdateAvailableWindows);
 
 	return true;
 }
@@ -137,4 +138,6 @@ void obs_module_unload()
 	obs_frontend_remove_event_callback(HandleEvent,nullptr);
 
 	refreshInterval.stop();
+
+	delete platform;
 }

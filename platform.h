@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QObject.h>
+#include <QObject>
 #include <unordered_set>
 
 class Platform : public QObject
@@ -13,7 +13,7 @@ protected:
 	static Platform *self;
 signals:
 	void ForegroundWindowChanged(const QString &title);
-	void AvailableWindowsUpdated(std::unordered_set<QString> &titles);
+	void AvailableWindowsUpdated(const std::unordered_set<QString> &titles);
 	void Log(const QString &message);
 public slots:
 	virtual void UpdateAvailableWindows()=0;

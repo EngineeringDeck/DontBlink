@@ -9,6 +9,7 @@
 #include <QLabel>
 #include <QComboBox>
 #include <QPushButton>
+#include <unordered_map>
 #include <unordered_set>
 
 class CrossReference : public QWidget
@@ -32,5 +33,5 @@ public:
 protected:
 	QWidget *content;
 	QVBoxLayout *layout;
-	std::map<QString,CrossReference*> crossReferences;
+	std::unordered_map<QString,CrossReference*> crossReferences;
 };
