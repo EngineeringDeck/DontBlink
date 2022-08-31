@@ -66,7 +66,7 @@ if (APPLE OR WIN32)
         ${OBS_LIB_DIR}/UI/obs-frontend-api/*/
     )
 
-    target_link_libraries(DontBlink ${OBS_LIB_DIR}/libobs/libobs.dylib ${OBS_FRONTEND_LIBRARY})
+    target_link_libraries(DontBlink ${LIBOBS_LIBRARY} ${OBS_FRONTEND_LIBRARY})
 endif()
 
 # Apple Frameworks
