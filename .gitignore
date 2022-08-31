@@ -1,5 +1,7 @@
 .vs/
 CMakeSettings.json
+CMakeLists.txt.user
 obs-build-dependencies/
 obs-studio/
 out/
+obs-qt/
