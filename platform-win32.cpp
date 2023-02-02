@@ -52,7 +52,7 @@ void PlatformWin32::UpdateAvailableWindows()
 
 BOOL CALLBACK PlatformWin32::WindowAvailable(HWND window,LPARAM data)
 {
-	if(!IsWindowVisible(window) || (GetWindowLong(window,GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) return TRUE;
+	if (!IsWindowVisible(window) || (GetWindowLong(window,GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) return TRUE;
 
 	HWND tryHandle=nullptr;
 	HWND walkHandle=nullptr;
