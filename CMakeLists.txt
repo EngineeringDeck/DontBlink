@@ -79,8 +79,8 @@ if (APPLE)
 endif()
 
 # Qt
-find_package(Qt5 COMPONENTS Widgets REQUIRED)
-target_link_libraries(DontBlink Qt5::Widgets)
+find_package(Qt6 COMPONENTS Widgets REQUIRED)
+target_link_libraries(DontBlink Qt::Widgets)
 
 
 
