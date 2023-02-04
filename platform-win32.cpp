@@ -34,7 +34,7 @@ QString PlatformWin32::GetWindowTitle(HWND window)
 
 VOID CALLBACK PlatformWin32::ForegroundWindowChangedWin32(HWINEVENTHOOK windowEvents,DWORD event,HWND window,LONG objectID,LONG childID,DWORD eventThread,DWORD timestamp)
 {
-	if (QString title=GetWindowTitle(window); !title.isNull()) emit ForegroundWindowChanged(title); // FIXME: why can't compiler choose the correct ForegroundWindowChanged by the number/type of parameters
+	if (QString title=GetWindowTitle(window); ValidTargetWindow(title)) emit ForegroundWindowChanged(title); // FIXME: why can't compiler choose the correct ForegroundWindowChanged by the number/type of parameters
 }
 
 VOID CALLBACK PlatformWin32::ForwardForegroundWindowChanged(HWINEVENTHOOK windowEvents,DWORD event,HWND window,LONG objectID,LONG childID,DWORD eventThread,DWORD timestamp)
@@ -73,7 +73,7 @@ BOOL CALLBACK PlatformWin32::WindowAvailable(HWND window,LPARAM data)
 
 	std::unordered_set<QString> *triggers=reinterpret_cast<std::unordered_set<QString>*>(data);
 	if (GetWindowLong(window,GWL_STYLE) & WS_CHILD) return TRUE;
-	if (QString title=GetWindowTitle(window); !title.isNull()) if (!triggers->contains(title)) triggers->insert(title);
+	if (QString title=GetWindowTitle(window); ValidTargetWindow(title)) if (!triggers->contains(title)) triggers->insert(title);
 
 	return TRUE;
 }
@@ -81,4 +81,9 @@ BOOL CALLBACK PlatformWin32::WindowAvailable(HWND window,LPARAM data)
 BOOL CALLBACK PlatformWin32::ForwardWindowAvailable(HWND window,LPARAM data)
 {
 	return static_cast<PlatformWin32*>(self)->WindowAvailable(window,data);
+}
+
+bool PlatformWin32::ValidTargetWindow(const QString &title)
+{
+	return !title.isNull() && !(title.startsWith("OBS") && title.contains("Profile") && title.contains("Scenes"));
 }

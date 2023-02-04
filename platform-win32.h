@@ -11,6 +11,7 @@ public:
 protected:
 	HWINEVENTHOOK windowEvents;
 	QString GetWindowTitle(HWND window);
+	bool ValidTargetWindow(const QString &title);
 	VOID CALLBACK ForegroundWindowChangedWin32(HWINEVENTHOOK windowEvents,DWORD event,HWND window,LONG objectID,LONG childID,DWORD eventThread,DWORD timestamp);
 	BOOL CALLBACK WindowAvailable(HWND window,LPARAM data);
 	static VOID CALLBACK ForwardForegroundWindowChanged(HWINEVENTHOOK windowEvents,DWORD event,HWND window,LONG objectID,LONG childID,DWORD eventThread,DWORD timestamp);

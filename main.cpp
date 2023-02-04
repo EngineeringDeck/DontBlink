@@ -60,13 +60,14 @@ void ForegroundWindowChanged(const QString &title)
 	obs_scene_t *scene=obs_scene_from_source(SourcePtr(obs_frontend_get_current_scene(),&obs_source_release).get()); // passing NULL into obs_scene_from_source() does not crash
 	if (!scene) return;
 
-	// active new source
-	if (QString newSourceName=sourcesWidget->Source(title); !newSourceName.isNull()) obs_sceneitem_set_visible(obs_scene_find_source(scene,newSourceName.toLocal8Bit().data()),true);
+	// activate new source
+	QString newSourceName=sourcesWidget->Source(title);
+	if (!newSourceName.isNull()) obs_sceneitem_set_visible(obs_scene_find_source(scene,newSourceName.toLocal8Bit().data()),true);
 
-	// deactive previous source
+	// deactivate previous source
 	if (!foregroundWindowTitle.isNull())
 	{
-		if (QString oldSourceName=sourcesWidget->Source(foregroundWindowTitle); !oldSourceName.isNull()) obs_sceneitem_set_visible(obs_scene_find_source(scene,oldSourceName.toLocal8Bit().data()),false);
+		if (QString oldSourceName=sourcesWidget->Source(foregroundWindowTitle); !oldSourceName.isNull() && oldSourceName != newSourceName) obs_sceneitem_set_visible(obs_scene_find_source(scene,oldSourceName.toLocal8Bit().data()),false);
 	}
 	foregroundWindowTitle=title;
 }
