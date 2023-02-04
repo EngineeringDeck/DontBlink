@@ -21,7 +21,7 @@ CrossReference::CrossReference(QString windowTitle,QStringList sources,QWidget *
 	layout->setContentsMargins(0,0,0,0);
 	setLayout(layout);
 	name=new QLabel(windowTitle,this);
-	name->setAlignment(Qt::AlignRight);
+	name->setAlignment(Qt::AlignRight|Qt::AlignVCenter);
 	layout->addWidget(name);
 	list=new ComboBox(this);
 	list->setPlaceholderText("-= [NONE] =-");
@@ -61,11 +61,11 @@ void CrossReference::PopulateComboBox(const QStringList &sources)
 
 ScrollingList::ScrollingList(QWidget *parent) : QScrollArea(parent)
 {
+	setStyleSheet("QScrollArea { border: none; }");
 	setWidgetResizable(true);
 	content=new QWidget(this);
-	layout=new QVBoxLayout(content);
-	layout->setContentsMargins(0,0,10,0);
-	content->setLayout(layout);
+	verticalLayout=new QVBoxLayout(content);
+	content->setLayout(verticalLayout);
 	content->setSizePolicy(QSizePolicy(QSizePolicy::MinimumExpanding,QSizePolicy::Fixed));
 	setWidget(content);
 }
@@ -86,7 +86,7 @@ void ScrollingList::AddEntries(const std::unordered_set<QString> &windowTitles,c
 			CrossReference *crossReference=new CrossReference(windowTitle,sources,this);
 			connect(crossReference,&CrossReference::ComboBoxPopup,this,&ScrollingList::ComboBoxPopup);
 			mergedCrossReferences[windowTitle]=crossReference;
-			layout->addWidget(crossReference);
+			verticalLayout->addWidget(crossReference);
 		}
 	}
 

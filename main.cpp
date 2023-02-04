@@ -101,11 +101,14 @@ void BuildUI()
 {
 	QMainWindow *window=static_cast<QMainWindow*>(obs_frontend_get_main_window());
 	QDockWidget *dock=new QDockWidget("Don't Blink",window);
-	QWidget *content=new QWidget(dock);
+	QFrame *content=new QFrame(dock);
+	content->setFrameShape(QFrame::StyledPanel);
 	QGridLayout *layout=new QGridLayout(content);
+	layout->setContentsMargins(0,0,0,0);
 	sourcesWidget=new ScrollingList(content);
 	layout->addWidget(sourcesWidget);
 	QPushButton *refresh=new QPushButton("Refresh",content);
+	refresh->setStyleSheet(QString{"padding-top: 0.25em; padding-bottom: 0.25em; margin: %1px;"}.arg(sourcesWidget->widget()->layout()->contentsMargins().bottom()));
 	refresh->connect(refresh,&QPushButton::clicked,platform,&Platform::UpdateAvailableWindows);
 	layout->addWidget(refresh);
 	content->setLayout(layout);

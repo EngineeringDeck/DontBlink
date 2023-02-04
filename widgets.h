@@ -47,7 +47,7 @@ public:
 	QString Source(const QString &windowTitle);
 protected:
 	QWidget *content;
-	QVBoxLayout *layout;
+	QVBoxLayout *verticalLayout;
 	std::unordered_map<QString,CrossReference*> crossReferences;
 signals:
 	void ComboBoxPopup(bool open);
