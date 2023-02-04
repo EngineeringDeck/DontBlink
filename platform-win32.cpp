@@ -19,7 +19,7 @@ QString PlatformWin32::GetWindowTitle(HWND window)
 	int titleLength=GetWindowTextLength(window); // TODO: does this have to be +1 now?
 	if (titleLength < 1) return {};
 	QByteArray title(++titleLength,'\0');
-	if (!GetWindowText(window,title.data(),titleLength)) // FIXME: don't assume LPSTR here
+	if (!GetWindowTextA(window,title.data(),titleLength)) // FIXME: don't assume LPSTR here
 	{
 		DWORD errorCode=GetLastError();
 		Log("Failed to obtain window title text (" + QString::number(GetLastError()) + ")");
@@ -42,7 +42,6 @@ VOID CALLBACK PlatformWin32::ForwardForegroundWindowChanged(HWINEVENTHOOK window
 	static_cast<PlatformWin32*>(self)->ForegroundWindowChangedWin32(windowEvents,event,window,objectID,childID,eventThread,timestamp);
 }
 
-
 void PlatformWin32::UpdateAvailableWindows()
 {
 	std::unordered_set<QString> titles;
@@ -50,18 +49,18 @@ void PlatformWin32::UpdateAvailableWindows()
 	emit AvailableWindowsUpdated(titles);
 }
 
-BOOL CALLBACK PlatformWin32::WindowAvailable(HWND window,LPARAM data)
+BOOL CALLBACK PlatformWin32::WindowAvailable(HWND window,LPARAM data) // data is the set of triggers
 {
-	if (!IsWindowVisible(window) || (GetWindowLong(window,GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) return TRUE;
+	if (!IsWindowVisible(window) || (GetWindowLong(window,GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) return TRUE; // ignore tooltip windows (why ignore non-visible windows?)
 
 	HWND tryHandle=nullptr;
 	HWND walkHandle=nullptr;
 	tryHandle=GetAncestor(window,GA_ROOTOWNER);
-	while(tryHandle != walkHandle)
+	while (tryHandle != walkHandle)
 	{
 		walkHandle=tryHandle;
 		tryHandle=GetLastActivePopup(walkHandle);
-		if(IsWindowVisible(tryHandle)) break;
+		if (IsWindowVisible(tryHandle)) break;
 	}
 	if (walkHandle != window) return TRUE;
 
@@ -69,9 +68,9 @@ BOOL CALLBACK PlatformWin32::WindowAvailable(HWND window,LPARAM data)
 		.cbSize=sizeof(titlebarInfo)
 	};
 	GetTitleBarInfo(window,&titlebarInfo);
-	if(titlebarInfo.rgstate[0] & STATE_SYSTEM_INVISIBLE) return TRUE;
+	if (titlebarInfo.rgstate[0] & STATE_SYSTEM_INVISIBLE) return TRUE;
 
-	std::unordered_set<QString> *triggers=reinterpret_cast<std::unordered_set<QString>*>(data);
+	std::unordered_set<QString> *triggers=reinterpret_cast<std::unordered_set<QString>*>(data); // cast the data to the set of triggers
 	if (GetWindowLong(window,GWL_STYLE) & WS_CHILD) return TRUE;
 	if (QString title=GetWindowTitle(window); ValidTargetWindow(title)) if (!triggers->contains(title)) triggers->insert(title);
 
