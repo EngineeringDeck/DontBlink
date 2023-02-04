@@ -1,6 +1,18 @@
 #include <QGridLayout>
 #include "widgets.h"
 
+void ComboBox::showPopup()
+{
+	emit Popup(true);
+	QComboBox::showPopup();
+}
+
+void ComboBox::hidePopup()
+{
+	emit Popup(false);
+	QComboBox::hidePopup();
+}
+
 CrossReference::CrossReference(QString windowTitle,QStringList sources,QWidget *parent) : QWidget(parent)
 {
 	setSizePolicy(QSizePolicy(QSizePolicy::MinimumExpanding,QSizePolicy::Fixed));
@@ -11,17 +23,40 @@ CrossReference::CrossReference(QString windowTitle,QStringList sources,QWidget *
 	name=new QLabel(windowTitle,this);
 	name->setAlignment(Qt::AlignRight);
 	layout->addWidget(name);
-	list=new QComboBox(this);
+	list=new ComboBox(this);
 	list->setPlaceholderText("-= [NONE] =-");
-	for (const QString &source : sources) list->addItem(source);
+	PopulateComboBox(sources);
 	list->setCurrentIndex(-1);
 	layout->addWidget(list);
+
+	connect(list,&ComboBox::Popup,this,&CrossReference::ComboBoxPopup);
 }
 
 QString CrossReference::Source()
 {
 	if (list->currentIndex() < 0) return {};
 	return list->currentText();
+}
+
+void CrossReference::PopulateComboBox(const QStringList &sources)
+{
+	// save the currently selected name and index
+	QString name=list->currentText();
+
+	// repopulate the new list of source names
+	list->clear();
+	for (const QString &source : sources) list->addItem(source);
+
+	// if the old selection is in the new list of source names, restore the selected index, otherwise set it to "none"
+	if (int index=list->findText(name); index > -1)
+	{
+		list->setCurrentIndex(index);
+	}
+	else
+	{
+		list->setCurrentIndex(-1);
+		list->setCurrentText("");
+	}
 }
 
 ScrollingList::ScrollingList(QWidget *parent) : QScrollArea(parent)
@@ -40,13 +75,16 @@ void ScrollingList::AddEntries(const std::unordered_set<QString> &windowTitles,c
 	std::unordered_map<QString,CrossReference*> mergedCrossReferences;
 	for (const QString &windowTitle : windowTitles)
 	{
-		if (crossReferences.contains(windowTitle))
+		if (auto candidate=crossReferences.find(windowTitle); candidate != crossReferences.end())
 		{
-			mergedCrossReferences.insert(std::move(crossReferences.extract(windowTitle)));
+			std::unordered_map<QString,CrossReference*>::node_type retainedCrossReference=crossReferences.extract(candidate);
+			retainedCrossReference.mapped()->PopulateComboBox(sources);
+			mergedCrossReferences.insert(std::move(retainedCrossReference));
 		}
 		else
 		{
 			CrossReference *crossReference=new CrossReference(windowTitle,sources,this);
+			connect(crossReference,&CrossReference::ComboBoxPopup,this,&ScrollingList::ComboBoxPopup);
 			mergedCrossReferences[windowTitle]=crossReference;
 			layout->addWidget(crossReference);
 		}

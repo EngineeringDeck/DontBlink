@@ -44,15 +44,22 @@ QStringList SourceNames()
 
 bool AvailableSource(obs_scene_t *scene,obs_sceneitem_t *item,void *data)
 {
+	auto newSources=reinterpret_cast<std::unordered_map<QString,obs_source_t*>*>(data);
 	obs_source_t *source=obs_sceneitem_get_source(item);
-	sources[obs_source_get_name(source)]=source;
+	QString name(obs_source_get_name(source));
+	if (auto candidate=sources.find(name); candidate != sources.end())
+		newSources->insert(sources.extract(candidate)); // reuse the existing entry if it's in the global sources list
+	else
+		(*newSources)[name]=source; // otherwise build a new entry
 	return true;
 }
 
 void UpdateAvailableSources()
 {
 	obs_scene_t *scene=obs_scene_from_source(SourcePtr(obs_frontend_get_current_scene(),&obs_source_release).get()); // get current scene
-	obs_scene_enum_items(scene,&AvailableSource,nullptr);
+	std::unordered_map<QString,obs_source_t*> newSources;
+	obs_scene_enum_items(scene,&AvailableSource,&newSources);
+	sources.swap(newSources); // throw away old sources that aren't around anymore
 }
 
 void ForegroundWindowChanged(const QString &title)
@@ -106,6 +113,13 @@ void BuildUI()
 	dock->setObjectName("dont_blink");
 	window->addDockWidget(Qt::BottomDockWidgetArea,dock);
 	obs_frontend_add_dock(dock);
+
+	sourcesWidget->connect(sourcesWidget,&ScrollingList::ComboBoxPopup,[](bool open) {
+		if (open)
+			refreshInterval.stop();
+		else
+			refreshInterval.start();
+	});
 }
 
 bool obs_module_load()

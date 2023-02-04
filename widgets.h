@@ -12,15 +12,30 @@
 #include <unordered_map>
 #include <unordered_set>
 
+class ComboBox : public QComboBox
+{
+	Q_OBJECT
+public:
+	ComboBox(QWidget *parent) : QComboBox(parent) { }
+protected:
+	void showPopup() override;
+	void hidePopup() override;
+signals:
+	void Popup(bool open);
+};
+
 class CrossReference : public QWidget
 {
 	Q_OBJECT
 public:
 	CrossReference(QString windowTitle,QStringList sources,QWidget *parent);
 	QString Source();
+	void PopulateComboBox(const QStringList &sources);
 protected:
 	QLabel *name;
-	QComboBox *list;
+	ComboBox *list;
+signals:
+	void ComboBoxPopup(bool open);
 };
 
 class ScrollingList : public QScrollArea
@@ -34,4 +49,6 @@ protected:
 	QWidget *content;
 	QVBoxLayout *layout;
 	std::unordered_map<QString,CrossReference*> crossReferences;
+signals:
+	void ComboBoxPopup(bool open);
 };
